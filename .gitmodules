@@ -1,0 +1,9 @@
+[submodule "qwen-image-edit-2511"]
+	path = qwen-image-edit-2511
+	url = https://github.com/between2058/qwen-image-edit.git
+[submodule "ReconViaGen"]
+	path = ReconViaGen
+	url = https://github.com/between2058/recon-image.git
+[submodule "Hunyuan3D-Part"]
+	path = Hunyuan3D-Part
+	url = https://github.com/between2058/3D-part.git

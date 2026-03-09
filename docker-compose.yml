@@ -1,0 +1,158 @@
+version: "3.8"
+
+# =============================================================================
+# AI Services — Unified Docker Compose
+#
+# Combines three GPU services into a single orchestration:
+#   1. qwen-image-api   (port 8190) — Text/Image generation & editing
+#   2. reconviagen       (port 52069) — 3D reconstruction
+#   3. p3sam             (port 5001)  — 3D mesh segmentation
+#
+# Quick start:
+#   cp .env.example .env
+#   $EDITOR .env                    # set paths for THIS machine
+#   docker compose up -d
+#
+# Build all images:
+#   docker compose build
+#
+# Start a single service:
+#   docker compose up -d qwen-image-api
+#
+# Logs:
+#   docker compose logs -f
+#   docker compose logs -f reconviagen
+#
+# Check GPU inside a container:
+#   docker compose exec qwen-image-api nvidia-smi
+#
+# Swagger UI:
+#   http://localhost:8190/docs   (Qwen Image)
+#   http://localhost:52069/docs  (ReconViaGen)
+#   http://localhost:5001/docs   (P3-SAM)
+# =============================================================================
+
+services:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # 1. Qwen Image API — Text2Img / Image Editing
+  # ─────────────────────────────────────────────────────────────────────────────
+  qwen-image-api:
+    build:
+      context: ./qwen-image-edit-2511
+      dockerfile: Dockerfile
+      args:
+        TORCH_CUDA_ARCH_LIST: "${TORCH_CUDA_ARCH_LIST:-8.0;8.6;8.9;9.0;10.0;12.0}"
+        MAX_JOBS: "${MAX_JOBS:-4}"
+        http_proxy: "${HTTP_PROXY:-http://proxy.intra:80}"
+        https_proxy: "${HTTPS_PROXY:-http://proxy.intra:80}"
+        no_proxy: "localhost,127.0.0.1"
+
+    image: qwen-image-api:latest
+    container_name: qwen-image-api
+
+    ports:
+      - "${QWEN_PORT:-8190}:8190"
+
+    volumes:
+      - ${HF_CACHE_HOST_PATH}:/hf_cache:rw
+      - ./logs/qwen-image:/app/logs
+
+    environment:
+      - HF_HOME=/hf_cache
+      - TRANSFORMERS_CACHE=/hf_cache
+      - HUGGINGFACE_HUB_CACHE=/hf_cache
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["${QWEN_GPU_ID:-0}"]
+              capabilities: [gpu]
+
+    shm_size: "8gb"
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # 2. ReconViaGen — 3D Reconstruction from images
+  # ─────────────────────────────────────────────────────────────────────────────
+  reconviagen:
+    build:
+      context: ./ReconViaGen
+      dockerfile: Dockerfile
+      args:
+        TORCH_CUDA_ARCH_LIST: "${TORCH_CUDA_ARCH_LIST:-8.0;8.6;8.9;9.0;10.0;12.0}"
+        MAX_JOBS: "${MAX_JOBS:-4}"
+        http_proxy: "${HTTP_PROXY:-http://proxy.intra:80}"
+        https_proxy: "${HTTPS_PROXY:-http://proxy.intra:80}"
+        no_proxy: "localhost,127.0.0.1"
+
+    image: reconviagen:latest
+    container_name: reconviagen-api
+
+    ports:
+      - "${RECONVIAGEN_PORT:-52069}:52069"
+
+    volumes:
+      - ${HF_CACHE_HOST_PATH}:/app/hf_cache:rw
+      - ./logs/reconviagen:/app/logs
+
+    environment:
+      - SPCONV_ALGO=native
+      - HF_HOME=/app/hf_cache
+      - TRANSFORMERS_CACHE=/app/hf_cache
+      - HUGGINGFACE_HUB_CACHE=/app/hf_cache
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["${RECONVIAGEN_GPU_ID:-0}"]
+              capabilities: [gpu]
+
+    shm_size: "8gb"
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # 3. P3-SAM — 3D Mesh Segmentation
+  # ─────────────────────────────────────────────────────────────────────────────
+  p3sam:
+    build:
+      # Build context must be Hunyuan3D-Part/ (parent) because the Dockerfile
+      # needs both P3-SAM/ and XPart/partgen/.
+      context: ./Hunyuan3D-Part
+      dockerfile: P3-SAM/Dockerfile
+      args:
+        TORCH_CUDA_ARCH_LIST: "${TORCH_CUDA_ARCH_LIST:-8.0;8.6;8.9;9.0;10.0;12.0}"
+        MAX_JOBS: "${MAX_JOBS:-4}"
+        http_proxy: "${HTTP_PROXY:-http://proxy.intra:80}"
+        https_proxy: "${HTTPS_PROXY:-http://proxy.intra:80}"
+        no_proxy: "localhost,127.0.0.1"
+
+    image: p3sam:latest
+    container_name: p3sam-api
+
+    ports:
+      - "${P3SAM_PORT:-5001}:5001"
+
+    volumes:
+      - ${HF_CACHE_HOST_PATH}:/root/.cache/huggingface:rw
+      - ./logs/p3sam:/app/logs
+
+    environment:
+      - SPCONV_ALGO=native
+      - HF_HOME=/root/.cache/huggingface
+      - HUGGINGFACE_HUB_CACHE=/root/.cache/huggingface
+      - NVIDIA_VISIBLE_DEVICES=${P3SAM_GPU_ID:-0}
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+    shm_size: "8gb"
+    restart: unless-stopped
