@@ -47,7 +47,6 @@ services:
         https_proxy: "${HTTPS_PROXY:-http://proxy.intra:80}"
         no_proxy: "localhost,127.0.0.1"
 
-    image: qwen-image-api:latest
     container_name: qwen-image-api
 
     ports:
@@ -87,7 +86,6 @@ services:
         https_proxy: "${HTTPS_PROXY:-http://proxy.intra:80}"
         no_proxy: "localhost,127.0.0.1"
 
-    image: reconviagen:latest
     container_name: reconviagen-api
 
     ports:
@@ -130,7 +128,6 @@ services:
         https_proxy: "${HTTPS_PROXY:-http://proxy.intra:80}"
         no_proxy: "localhost,127.0.0.1"
 
-    image: p3sam:latest
     container_name: p3sam-api
 
     ports:
